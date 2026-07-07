@@ -1,0 +1,11 @@
+# Xcode / build 산출물
+build/
+DerivedData/
+*.xcuserstate
+*.profraw
+
+# macOS
+.DS_Store
+
+# SwiftPM
+.swiftpm/
