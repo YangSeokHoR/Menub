@@ -10,22 +10,22 @@ import SwiftUI
 
 struct PopoverRootView: View {
     let registry: RegistryStore
+    let config: ConfigStore
     var invoker = Invoker()
-
-    // M2/M3 임시 규칙: Runlet(id "runlet")을 핀으로 간주해 맨 위 고정.
-    // 사용자별 pinned/enabled/sortIndex의 영속 저장(ConfigStore)은 M4/M6에서 도입.
-    private static let pinnedID = "runlet"
 
     // 선택된 위성 id. nil이면 루트 그리드, 값이 있으면 액션 목록(2뎁스).
     @State private var selectedID: String?
 
+    // 팝오버 목록 = 가용 도구(RegistryStore) ∩ enabled(ConfigStore). 핀은 config 기준.
     private var sortedSatellites: [SatelliteManifest] {
-        registry.manifests.sorted { lhs, rhs in
-            let lhsPinned = lhs.id == Self.pinnedID
-            let rhsPinned = rhs.id == Self.pinnedID
-            if lhsPinned != rhsPinned { return lhsPinned }
-            return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
-        }
+        registry.manifests
+            .filter { config.isEnabled($0.id) }
+            .sorted { lhs, rhs in
+                let lhsPinned = config.isPinned(lhs.id)
+                let rhsPinned = config.isPinned(rhs.id)
+                if lhsPinned != rhsPinned { return lhsPinned }
+                return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+            }
     }
 
     private var selectedSatellite: SatelliteManifest? {
@@ -69,6 +69,11 @@ struct PopoverRootView: View {
             Text("menub")
                 .font(.headline)
             Spacer()
+            SettingsLink {
+                Image(systemName: "gearshape")
+            }
+            .buttonStyle(.plain)
+            .help("설정")
         }
         .padding(.horizontal, 16)
         .padding(.top, 14)
@@ -83,7 +88,7 @@ struct PopoverRootView: View {
             ForEach(sortedSatellites) { satellite in
                 SatelliteTile(
                     manifest: satellite,
-                    isPinned: satellite.id == Self.pinnedID,
+                    isPinned: config.isPinned(satellite.id),
                     onSelect: { selectedID = satellite.id }
                 )
             }
@@ -96,10 +101,13 @@ struct PopoverRootView: View {
             Image(systemName: "tray")
                 .font(.largeTitle)
                 .foregroundStyle(.secondary)
-            Text("아직 등록된 도구가 없습니다.")
+            Text("허브에 켜진 도구가 없습니다.\n설정에서 도구를 켜 보세요.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            SettingsLink {
+                Text("설정 열기")
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 28)
@@ -224,5 +232,5 @@ private struct ActionRow: View {
 }
 
 #Preview {
-    PopoverRootView(registry: RegistryStore())
+    PopoverRootView(registry: RegistryStore(), config: ConfigStore())
 }

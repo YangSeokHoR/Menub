@@ -49,4 +49,56 @@ struct MenubTests {
         #expect(result == .invalidURL)
         #expect(openCalled == false)
     }
+
+    // MARK: - ConfigStore / RegistrationCoordinator
+
+    /// 임시 디렉터리를 쓰는 격리된 ConfigStore와 Coordinator를 만든다.
+    private func makeIsolatedConfig() -> (ConfigStore, RegistrationCoordinator, URL) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let coordinator = RegistrationCoordinator(managedURL: dir.appendingPathComponent("managed.json"))
+        let config = ConfigStore(coordinator: coordinator, configURL: dir.appendingPathComponent("config.json"))
+        return (config, coordinator, dir)
+    }
+
+    @Test func togglingEnabledPersistsAndSyncsManagedFlag() throws {
+        let (config, coordinator, dir) = makeIsolatedConfig()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        #expect(config.isEnabled("runlet") == false)
+        #expect(coordinator.managedIDs() == [])
+
+        config.setEnabled("runlet", true)
+
+        #expect(config.isEnabled("runlet") == true)
+        #expect(config.enabledIDs == ["runlet"])
+        // 켜진 위성이 관리 플래그 파일에 반영된다(위성이 아이콘을 숨기는 근거).
+        #expect(coordinator.managedIDs() == ["runlet"])
+
+        config.setEnabled("runlet", false)
+        #expect(config.isEnabled("runlet") == false)
+        #expect(coordinator.managedIDs() == [])
+    }
+
+    @Test func enabledStatePersistsAcrossReload() throws {
+        let (config, coordinator, dir) = makeIsolatedConfig()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        config.setEnabled("clip", true)
+
+        // 같은 경로로 새 스토어를 만들어 디스크에서 다시 읽는다.
+        let reloaded = ConfigStore(
+            coordinator: coordinator,
+            configURL: dir.appendingPathComponent("config.json")
+        )
+        #expect(reloaded.isEnabled("clip") == true)
+    }
+
+    @Test func runletPinnedByDefault() throws {
+        let (config, _, dir) = makeIsolatedConfig()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        #expect(config.isPinned("runlet") == true)
+        #expect(config.isPinned("clip") == false)
+    }
 }
