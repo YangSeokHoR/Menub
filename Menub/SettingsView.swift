@@ -49,14 +49,20 @@ struct SettingsView: View {
                 List {
                     ForEach(orderedSatellites) { satellite in
                         row(for: satellite)
+                            .contextMenu {
+                                Button("허브에서 삭제", role: .destructive) {
+                                    delete(satellite.id)
+                                }
+                            }
                     }
                     .onMove(perform: move)
+                    .onDelete(perform: delete)
                 }
                 .listStyle(.inset(alternatesRowBackgrounds: true))
                 .frame(minHeight: 220)
             }
 
-            Text("드래그로 순서를 바꾸고, 핀으로 맨 위에 고정합니다. 켜면 그 앱이 다음 실행부터 자기 메뉴바 아이콘을 숨깁니다.")
+            Text("드래그로 순서를 바꾸고, 핀으로 맨 위에 고정합니다. 켜면 그 앱이 다음 실행부터 자기 메뉴바 아이콘을 숨깁니다. 스와이프(또는 우클릭)로 삭제하면 허브에서 빠지고 그 앱은 자기 아이콘을 다시 표시합니다.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -102,6 +108,16 @@ struct SettingsView: View {
         var ids = orderedSatellites.map(\.id)
         ids.move(fromOffsets: source, toOffset: destination)
         config.setOrder(ids)
+    }
+
+    /// 허브에서 삭제: 설정 제거(관리 해제 → 아이콘 복귀) + 매니페스트 삭제(목록에서 제거).
+    private func delete(_ id: String) {
+        config.remove(id)
+        registry.deleteManifest(id: id)
+    }
+
+    private func delete(at offsets: IndexSet) {
+        offsets.map { orderedSatellites[$0].id }.forEach(delete)
     }
 
     private func enabledBinding(for id: String) -> Binding<Bool> {
