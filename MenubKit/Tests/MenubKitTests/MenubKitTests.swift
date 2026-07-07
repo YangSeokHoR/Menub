@@ -90,6 +90,32 @@ final class MenubKitTests: XCTestCase {
         XCTAssertNil(invoked)
     }
 
+    func testObserveManagementFiresWhenManagedChanges() throws {
+        let dir = makeTempDir()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let sat = makeSatellite(in: dir)
+
+        let becameManaged = expectation(description: "관리 상태가 true로 바뀜")
+        var states: [Bool] = []
+        sat.observeManagement { managed in
+            states.append(managed)
+            if managed { becameManaged.fulfill() }
+        }
+
+        // 감시가 준비된 뒤 managed.json을 써서 관리 상태로 전환
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            let data = try! JSONEncoder().encode(MenubManagedRegistry(managedIDs: ["runlet"]))
+            try! data.write(to: dir.appendingPathComponent("managed.json"), options: .atomic)
+        }
+
+        wait(for: [becameManaged], timeout: 3)
+        sat.stopObservingManagement()
+
+        XCTAssertEqual(states.first, false)  // 처음엔 미관리
+        XCTAssertEqual(states.last, true)    // 파일 쓰자 관리로 전환
+    }
+
     func testIsManagedByHubReadsManagedFile() throws {
         let dir = makeTempDir()
         defer { try? FileManager.default.removeItem(at: dir) }

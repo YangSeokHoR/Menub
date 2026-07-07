@@ -13,6 +13,8 @@ struct SettingsView: View {
     let config: ConfigStore
     let runtime: RuntimeMonitor
 
+    @State private var loginEnabled = LoginItem.isEnabled
+
     // 설정 목록은 사용자가 정한 순서(sortIndex → 이름)대로 보여, 드래그가 그대로 반영되게 한다.
     // (팝오버/팔레트는 여기에 더해 핀을 맨 위로 띄운다)
     private var orderedSatellites: [SatelliteManifest] {
@@ -28,10 +30,15 @@ struct SettingsView: View {
             toolsSection
             Divider()
             hotkeySection
+            Divider()
+            generalSection
         }
         .padding(20)
-        .frame(width: 420, height: 480)
-        .onAppear { registry.load() }
+        .frame(width: 420, height: 540)
+        .onAppear {
+            registry.load()
+            loginEnabled = LoginItem.isEnabled
+        }
     }
 
     // MARK: - 도구 목록
@@ -144,6 +151,24 @@ struct SettingsView: View {
             Text("전역에서 이 조합을 누르면 검색 팔레트가 열립니다.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - 일반
+
+    private var generalSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("일반")
+                .font(.headline)
+            Toggle("로그인 시 자동 실행", isOn: Binding(
+                get: { loginEnabled },
+                set: { on in loginEnabled = LoginItem.setEnabled(on) ? on : LoginItem.isEnabled }
+            ))
+            if LoginItem.requiresApproval {
+                Text("시스템 설정 › 일반 › 로그인 항목에서 menub를 허용해야 적용됩니다.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }

@@ -162,7 +162,20 @@ if menub.shouldCreateStatusItem() {
 }
 ```
 
-반영 시점은 **재실행 기준**(§8-2): 허브에서 토글한 뒤 위성을 다시 켜면 아이콘이 숨거나 다시 뜬다. 라이브 반영이 필요하면 위성이 `managed.json`을 파일 감시하도록 확장(선택).
+반영 시점은 기본이 **재실행 기준**(§8-2): 허브에서 토글/삭제한 뒤 위성을 다시 켜면 아이콘이 숨거나 다시 뜬다.
+
+**즉시 반영(선택)**: 재실행 없이 바로 숨김/표시하려면 `observeManagement`로 `managed.json` 변경을 감시해 상태 아이템을 만들거나 없앤다.
+
+```swift
+menub.observeManagement { isManaged in
+    if isManaged {
+        statusItem = nil                       // 허브가 관리 → 아이콘 제거
+    } else if statusItem == nil {
+        createMyStatusItem()                    // 관리 해제 → 아이콘 복원
+    }
+}
+```
+(처음 호출 시 현재 상태로 한 번 콜백하므로, 시작 시 `shouldCreateStatusItem()` 게이트 대신 이것만 써도 된다. 콜백은 메인 큐에서 온다.)
 
 ---
 

@@ -53,6 +53,28 @@ struct PopoverRootView: View {
             } else {
                 grid
             }
+            footer
+        }
+    }
+
+    private var footer: some View {
+        VStack(spacing: 0) {
+            Divider()
+            HStack {
+                Spacer()
+                Button {
+                    NSApplication.shared.terminate(nil)
+                } label: {
+                    Label("menub 종료", systemImage: "power")
+                        .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .keyboardShortcut("q")
+                .help("menub 종료 (⌘Q)")
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
         }
     }
 
