@@ -24,7 +24,8 @@ struct PaletteView: View {
         PaletteSearch.items(
             manifests: registry.manifests,
             isEnabled: config.isEnabled,
-            isPinned: config.isPinned
+            isPinned: config.isPinned,
+            sortIndex: config.sortIndex
         )
     }
 
