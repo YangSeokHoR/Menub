@@ -21,6 +21,8 @@ public final class MenubSatellite {
     private let baseDirectory: URL
     private var actions: [MenubAction] = []
     private var invokeHandler: ((String) -> Void)?
+    private var managementSource: (any DispatchSourceFileSystemObject)?
+    private var lastManagedState: Bool?
 
     /// - Parameter baseDirectory: 기본은 공유 폴더. 테스트에서 임시 폴더를 주입할 수 있다.
     public init(
@@ -130,5 +132,42 @@ public final class MenubSatellite {
     /// 상태 아이템을 만들어야 하는가(= 허브가 관리하지 않는가).
     public func shouldCreateStatusItem() -> Bool {
         !isManagedByHub
+    }
+
+    /// managed.json 변경을 감시해 관리 상태가 바뀌면 즉시 콜백한다(재실행 없이 아이콘 숨김/표시).
+    /// 콜백 인자는 "허브가 관리 중(=아이콘 숨김)"인지 여부. 메인 큐에서 호출된다.
+    /// 처음 호출 시 현재 상태로 한 번 콜백한다.
+    public func observeManagement(_ onChange: @escaping (Bool) -> Void) {
+        stopObservingManagement()
+
+        let current = isManagedByHub
+        lastManagedState = current
+        DispatchQueue.main.async { onChange(current) }
+
+        // 원자적 쓰기(rename)까지 잡히도록 파일이 아니라 공유 폴더를 감시한다.
+        let descriptor = open(baseDirectory.path, O_EVTONLY)
+        guard descriptor >= 0 else { return }
+
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: descriptor,
+            eventMask: [.write, .delete, .rename, .extend, .attrib],
+            queue: DispatchQueue.global(qos: .utility)
+        )
+        source.setEventHandler { [weak self] in
+            guard let self else { return }
+            let now = self.isManagedByHub
+            guard now != self.lastManagedState else { return }
+            self.lastManagedState = now
+            DispatchQueue.main.async { onChange(now) }
+        }
+        source.setCancelHandler { close(descriptor) }
+        source.resume()
+        managementSource = source
+    }
+
+    public func stopObservingManagement() {
+        managementSource?.cancel()
+        managementSource = nil
+        lastManagedState = nil
     }
 }
