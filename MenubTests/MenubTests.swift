@@ -119,7 +119,8 @@ struct MenubTests {
         return PaletteSearch.items(
             manifests: [clip, runlet],
             isEnabled: { _ in true },
-            isPinned: { $0 == "runlet" }
+            isPinned: { $0 == "runlet" },
+            sortIndex: { _ in 0 }
         )
     }
 
@@ -161,5 +162,65 @@ struct MenubTests {
         let result = PaletteSearch.run(items: sampleItems, query: "")
         #expect(result.items.count == 3)
         #expect(result.autoselect == nil)
+    }
+
+    // MARK: - M6: 핀 / 정렬 / 단축키 / 실행 감지
+
+    private func manifest(_ id: String, _ name: String) -> SatelliteManifest {
+        SatelliteManifest(id: id, displayName: name, urlScheme: id, iconRef: nil, actions: [])
+    }
+
+    @Test func setOrderAssignsSortIndexAndSortRespectsPinThenOrder() throws {
+        let (config, _, dir) = makeIsolatedConfig()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let clip = manifest("clip", "Clip")
+        let runlet = manifest("runlet", "Runlet")
+
+        config.setOrder(["clip", "runlet"])
+        #expect(config.sortIndex("clip") == 0)
+        #expect(config.sortIndex("runlet") == 1)
+
+        // runlet은 기본 핀이라 sortIndex가 뒤여도 맨 앞.
+        #expect(config.sorted([clip, runlet]).map(\.id) == ["runlet", "clip"])
+
+        // 핀을 풀면 sortIndex 순서를 따른다.
+        config.setPinned("runlet", false)
+        #expect(config.sorted([clip, runlet]).map(\.id) == ["clip", "runlet"])
+    }
+
+    @Test func pinPersistsAcrossReload() throws {
+        let (config, coordinator, dir) = makeIsolatedConfig()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        config.setPinned("clip", true)
+        let reloaded = ConfigStore(coordinator: coordinator, configURL: dir.appendingPathComponent("config.json"))
+        #expect(reloaded.isPinned("clip") == true)
+    }
+
+    @Test func paletteHotkeyPersistsAndNotifies() throws {
+        let (config, coordinator, dir) = makeIsolatedConfig()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        var notified: Hotkey?
+        config.onPaletteHotkeyChanged = { notified = $0 }
+
+        #expect(config.effectiveHotkey == .default)  // 저장 전엔 기본값
+
+        let custom = Hotkey(keyCode: 49, modifiers: 4096, display: "⌃Space")
+        config.setPaletteHotkey(custom)
+
+        #expect(notified == custom)
+        #expect(config.effectiveHotkey == custom)
+
+        let reloaded = ConfigStore(coordinator: coordinator, configURL: dir.appendingPathComponent("config.json"))
+        #expect(reloaded.effectiveHotkey == custom)
+    }
+
+    @Test func runtimeMonitorMatchesBundleIdentifier() throws {
+        let running: Set<String> = ["com.example.runlet"]
+        #expect(RuntimeMonitor.contains("com.example.runlet", in: running) == true)
+        #expect(RuntimeMonitor.contains("com.example.other", in: running) == false)
+        #expect(RuntimeMonitor.contains(nil, in: running) == false)
     }
 }

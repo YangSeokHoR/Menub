@@ -13,6 +13,8 @@ struct SatelliteManifest: Codable, Identifiable, Hashable {
     let id: String
     let displayName: String
     let urlScheme: String
+    /// 실행 중 여부를 감지하기 위한 앱 번들 식별자(선택). 없으면 실행 상태를 표시하지 않는다.
+    var bundleIdentifier: String? = nil
     var iconRef: String?
     var actions: [SatelliteAction]
 

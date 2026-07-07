@@ -26,17 +26,20 @@ enum PaletteSearch {
         var autoselect: Int?
     }
 
-    /// 가용 ∩ enabled 위성의 액션을 평탄화한다. 핀 위성이 앞, 그다음 이름순.
+    /// 가용 ∩ enabled 위성의 액션을 평탄화한다. 핀 우선 → sortIndex → 이름순.
     static func items(
         manifests: [SatelliteManifest],
         isEnabled: (String) -> Bool,
-        isPinned: (String) -> Bool
+        isPinned: (String) -> Bool,
+        sortIndex: (String) -> Int
     ) -> [PaletteItem] {
         manifests
             .filter { isEnabled($0.id) }
             .sorted { lhs, rhs in
                 let lp = isPinned(lhs.id), rp = isPinned(rhs.id)
                 if lp != rp { return lp }
+                let ls = sortIndex(lhs.id), rs = sortIndex(rhs.id)
+                if ls != rs { return ls < rs }
                 return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
             }
             .flatMap { manifest in

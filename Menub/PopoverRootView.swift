@@ -3,7 +3,7 @@
 //  Menub
 //
 //  기본 진입 UI. 위성 그리드(1뎁스) → 액션 목록(2뎁스)을 같은 패널에서 전환한다.
-//  액션 클릭 시 Invoker가 URL로 실제 위성 기능을 호출한다. (개발지침 §5, §9 M3)
+//  액션 클릭 시 Invoker가 URL로 실제 위성 기능을 호출한다. (개발지침 §5, §9 M3/M6)
 //
 
 import SwiftUI
@@ -11,21 +11,15 @@ import SwiftUI
 struct PopoverRootView: View {
     let registry: RegistryStore
     let config: ConfigStore
+    let runtime: RuntimeMonitor
     var invoker = Invoker()
 
     // 선택된 위성 id. nil이면 루트 그리드, 값이 있으면 액션 목록(2뎁스).
     @State private var selectedID: String?
 
-    // 팝오버 목록 = 가용 도구(RegistryStore) ∩ enabled(ConfigStore). 핀은 config 기준.
+    // 팝오버 목록 = 가용 도구(RegistryStore) ∩ enabled(ConfigStore). 핀·정렬은 config 기준.
     private var sortedSatellites: [SatelliteManifest] {
-        registry.manifests
-            .filter { config.isEnabled($0.id) }
-            .sorted { lhs, rhs in
-                let lhsPinned = config.isPinned(lhs.id)
-                let rhsPinned = config.isPinned(rhs.id)
-                if lhsPinned != rhsPinned { return lhsPinned }
-                return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
-            }
+        config.sorted(registry.manifests.filter { config.isEnabled($0.id) })
     }
 
     private var selectedSatellite: SatelliteManifest? {
@@ -89,6 +83,7 @@ struct PopoverRootView: View {
                 SatelliteTile(
                     manifest: satellite,
                     isPinned: config.isPinned(satellite.id),
+                    isRunning: runtime.isRunning(satellite.bundleIdentifier),
                     onSelect: { selectedID = satellite.id }
                 )
             }
@@ -115,10 +110,11 @@ struct PopoverRootView: View {
     }
 }
 
-/// 위성 하나를 나타내는 그리드 타일. 탭하면 액션 목록으로 전환. (아이콘 + 이름, 핀 표시)
+/// 위성 하나를 나타내는 그리드 타일. 탭하면 액션 목록으로 전환. (아이콘 + 이름, 핀/실행 표시)
 private struct SatelliteTile: View {
     let manifest: SatelliteManifest
     let isPinned: Bool
+    let isRunning: Bool
     let onSelect: () -> Void
 
     var body: some View {
@@ -132,6 +128,16 @@ private struct SatelliteTile: View {
                             Image(systemName: manifest.systemImageName)
                                 .font(.title2)
                                 .foregroundStyle(.primary)
+                        }
+                        .overlay(alignment: .bottomLeading) {
+                            if isRunning {
+                                Circle()
+                                    .fill(.green)
+                                    .frame(width: 9, height: 9)
+                                    .overlay(Circle().stroke(.background, lineWidth: 1.5))
+                                    .padding(4)
+                                    .help("실행 중")
+                            }
                         }
 
                     if isPinned {
@@ -232,5 +238,5 @@ private struct ActionRow: View {
 }
 
 #Preview {
-    PopoverRootView(registry: RegistryStore(), config: ConfigStore())
+    PopoverRootView(registry: RegistryStore(), config: ConfigStore(), runtime: RuntimeMonitor())
 }

@@ -22,7 +22,7 @@ struct HubConfigEntry: Codable, Hashable {
 /// 허브 전역 설정.
 struct HubConfig: Codable {
     var entries: [HubConfigEntry] = []
-    var paletteHotkey: String?  // M5에서 사용
+    var paletteHotkey: Hotkey?
 }
 
 @Observable
@@ -31,6 +31,8 @@ final class ConfigStore {
 
     @ObservationIgnored let configURL: URL
     @ObservationIgnored private let coordinator: RegistrationCoordinator
+    /// 팔레트 단축키가 바뀌면 호출된다(HotkeyManager 재등록 연결용). 뷰/코어 결합을 피해 콜백으로 노출.
+    @ObservationIgnored var onPaletteHotkeyChanged: ((Hotkey?) -> Void)?
 
     // 기본 핀 규칙: Runlet은 최초 등록 시 pinned. (사용자가 이후 변경 가능)
     private static let defaultPinnedID = "runlet"
@@ -57,9 +59,29 @@ final class ConfigStore {
         entry(for: satelliteId)?.pinned ?? (satelliteId == Self.defaultPinnedID)
     }
 
+    func sortIndex(_ satelliteId: String) -> Int {
+        entry(for: satelliteId)?.sortIndex ?? Int.max
+    }
+
     /// 현재 허브에 포함(enabled)된 위성 id 목록.
     var enabledIDs: [String] {
         config.entries.filter(\.enabled).map(\.satelliteId)
+    }
+
+    /// 등록된 단축키(없으면 기본값).
+    var effectiveHotkey: Hotkey {
+        config.paletteHotkey ?? .default
+    }
+
+    /// 핀 우선 → sortIndex → 이름순으로 정렬한다. (팝오버·팔레트·설정 공통 정렬)
+    func sorted(_ manifests: [SatelliteManifest]) -> [SatelliteManifest] {
+        manifests.sorted { lhs, rhs in
+            let lp = isPinned(lhs.id), rp = isPinned(rhs.id)
+            if lp != rp { return lp }
+            let ls = sortIndex(lhs.id), rs = sortIndex(rhs.id)
+            if ls != rs { return ls < rs }
+            return lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName) == .orderedAscending
+        }
     }
 
     private func entry(for satelliteId: String) -> HubConfigEntry? {
@@ -70,20 +92,46 @@ final class ConfigStore {
 
     /// 위성의 허브 포함 여부를 켜고 끈다. 저장 후 관리 플래그를 동기화한다.
     func setEnabled(_ satelliteId: String, _ enabled: Bool) {
-        if let index = config.entries.firstIndex(where: { $0.satelliteId == satelliteId }) {
-            config.entries[index].enabled = enabled
-        } else {
-            config.entries.append(
-                HubConfigEntry(
-                    satelliteId: satelliteId,
-                    enabled: enabled,
-                    pinned: satelliteId == Self.defaultPinnedID,
-                    sortIndex: config.entries.count
-                )
-            )
-        }
+        withEntry(satelliteId) { $0.enabled = enabled }
         save()
         syncManaged()
+    }
+
+    /// 위성의 상단 고정 여부를 바꾼다.
+    func setPinned(_ satelliteId: String, _ pinned: Bool) {
+        withEntry(satelliteId) { $0.pinned = pinned }
+        save()
+    }
+
+    /// 주어진 순서대로 sortIndex를 다시 매긴다.
+    func setOrder(_ orderedIDs: [String]) {
+        for (index, id) in orderedIDs.enumerated() {
+            withEntry(id) { $0.sortIndex = index }
+        }
+        save()
+    }
+
+    /// 팔레트 단축키를 저장하고 재등록 콜백을 호출한다.
+    func setPaletteHotkey(_ hotkey: Hotkey?) {
+        config.paletteHotkey = hotkey
+        save()
+        onPaletteHotkeyChanged?(hotkey)
+    }
+
+    /// 항목이 있으면 수정, 없으면 기본값으로 생성 후 수정한다.
+    private func withEntry(_ satelliteId: String, _ mutate: (inout HubConfigEntry) -> Void) {
+        if let index = config.entries.firstIndex(where: { $0.satelliteId == satelliteId }) {
+            mutate(&config.entries[index])
+        } else {
+            var entry = HubConfigEntry(
+                satelliteId: satelliteId,
+                enabled: false,
+                pinned: satelliteId == Self.defaultPinnedID,
+                sortIndex: config.entries.count
+            )
+            mutate(&entry)
+            config.entries.append(entry)
+        }
     }
 
     // MARK: - 영속화

@@ -18,14 +18,19 @@ struct MenubApp: App {
             PopoverRootView(
                 registry: appDelegate.registry,
                 config: appDelegate.config,
+                runtime: appDelegate.runtime,
                 invoker: appDelegate.invoker
             )
         }
         .menuBarExtraStyle(.window)
 
-        // 위성 토글 설정 창.
+        // 위성 토글·정렬·단축키 설정 창.
         Settings {
-            SettingsView(registry: appDelegate.registry, config: appDelegate.config)
+            SettingsView(
+                registry: appDelegate.registry,
+                config: appDelegate.config,
+                runtime: appDelegate.runtime
+            )
         }
     }
 }
