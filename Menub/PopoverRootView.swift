@@ -2,18 +2,22 @@
 //  PopoverRootView.swift
 //  Menub
 //
-//  기본 진입 UI. 가용 위성을 그리드로 보여준다. Runlet은 맨 위 고정. (개발지침 §5, §9 M2)
-//  액션 2뎁스 전환과 실제 호출은 M3에서 붙는다.
+//  기본 진입 UI. 위성 그리드(1뎁스) → 액션 목록(2뎁스)을 같은 패널에서 전환한다.
+//  액션 클릭 시 Invoker가 URL로 실제 위성 기능을 호출한다. (개발지침 §5, §9 M3)
 //
 
 import SwiftUI
 
 struct PopoverRootView: View {
     let registry: RegistryStore
+    var invoker = Invoker()
 
-    // M2 임시 규칙: Runlet(id "runlet")을 핀으로 간주해 맨 위 고정.
+    // M2/M3 임시 규칙: Runlet(id "runlet")을 핀으로 간주해 맨 위 고정.
     // 사용자별 pinned/enabled/sortIndex의 영속 저장(ConfigStore)은 M4/M6에서 도입.
     private static let pinnedID = "runlet"
+
+    // 선택된 위성 id. nil이면 루트 그리드, 값이 있으면 액션 목록(2뎁스).
+    @State private var selectedID: String?
 
     private var sortedSatellites: [SatelliteManifest] {
         registry.manifests.sorted { lhs, rhs in
@@ -24,18 +28,38 @@ struct PopoverRootView: View {
         }
     }
 
+    private var selectedSatellite: SatelliteManifest? {
+        guard let selectedID else { return nil }
+        return registry.manifests.first { $0.id == selectedID }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
+            if let satellite = selectedSatellite {
+                ActionListView(
+                    manifest: satellite,
+                    invoker: invoker,
+                    onBack: { selectedID = nil }
+                )
+            } else {
+                rootView
+            }
+        }
+        .frame(width: 300)
+        .onAppear { registry.load() }
+    }
 
+    // MARK: - 루트 (위성 그리드)
+
+    private var rootView: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
             if sortedSatellites.isEmpty {
                 emptyState
             } else {
                 grid
             }
         }
-        .frame(width: 300)
-        .onAppear { registry.load() }
     }
 
     private var header: some View {
@@ -59,7 +83,8 @@ struct PopoverRootView: View {
             ForEach(sortedSatellites) { satellite in
                 SatelliteTile(
                     manifest: satellite,
-                    isPinned: satellite.id == Self.pinnedID
+                    isPinned: satellite.id == Self.pinnedID,
+                    onSelect: { selectedID = satellite.id }
                 )
             }
         }
@@ -82,38 +107,119 @@ struct PopoverRootView: View {
     }
 }
 
-/// 위성 하나를 나타내는 그리드 타일. (아이콘 + 이름, 핀 표시)
+/// 위성 하나를 나타내는 그리드 타일. 탭하면 액션 목록으로 전환. (아이콘 + 이름, 핀 표시)
 private struct SatelliteTile: View {
     let manifest: SatelliteManifest
     let isPinned: Bool
+    let onSelect: () -> Void
 
     var body: some View {
-        VStack(spacing: 6) {
-            ZStack(alignment: .topTrailing) {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(.quaternary)
-                    .frame(width: 56, height: 56)
-                    .overlay {
-                        Image(systemName: manifest.systemImageName)
-                            .font(.title2)
-                            .foregroundStyle(.primary)
+        Button(action: onSelect) {
+            VStack(spacing: 6) {
+                ZStack(alignment: .topTrailing) {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(.quaternary)
+                        .frame(width: 56, height: 56)
+                        .overlay {
+                            Image(systemName: manifest.systemImageName)
+                                .font(.title2)
+                                .foregroundStyle(.primary)
+                        }
+
+                    if isPinned {
+                        Image(systemName: "pin.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                            .padding(4)
                     }
-
-                if isPinned {
-                    Image(systemName: "pin.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
-                        .padding(4)
                 }
-            }
 
-            Text(manifest.displayName)
-                .font(.caption)
-                .lineLimit(1)
-                .truncationMode(.tail)
+                Text(manifest.displayName)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .frame(width: 76)
         }
-        .frame(width: 76)
+        .buttonStyle(.plain)
         .help(manifest.displayName)
+    }
+}
+
+/// 2뎁스: 선택된 위성의 액션 목록. 액션 클릭 시 Invoker로 URL 호출.
+private struct ActionListView: View {
+    let manifest: SatelliteManifest
+    let invoker: Invoker
+    let onBack: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+
+            if manifest.actions.isEmpty {
+                Text("실행할 액션이 없습니다.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+            } else {
+                VStack(spacing: 2) {
+                    ForEach(manifest.actions) { action in
+                        ActionRow(action: action) {
+                            invoker.invoke(action)
+                        }
+                    }
+                }
+                .padding(8)
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Button(action: onBack) {
+                Image(systemName: "chevron.left")
+                    .font(.body.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .help("뒤로")
+
+            Image(systemName: manifest.systemImageName)
+                .foregroundStyle(.secondary)
+            Text(manifest.displayName)
+                .font(.headline)
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+        .padding(.bottom, 10)
+    }
+}
+
+/// 액션 한 줄. 탭하면 onInvoke 실행.
+private struct ActionRow: View {
+    let action: SatelliteAction
+    let onInvoke: () -> Void
+
+    var body: some View {
+        Button(action: onInvoke) {
+            HStack(spacing: 10) {
+                Image(systemName: action.systemImageName)
+                    .frame(width: 20)
+                    .foregroundStyle(.secondary)
+                Text(action.title)
+                    .foregroundStyle(.primary)
+                Spacer()
+                Image(systemName: "arrow.up.forward.app")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(.plain)
     }
 }
 
