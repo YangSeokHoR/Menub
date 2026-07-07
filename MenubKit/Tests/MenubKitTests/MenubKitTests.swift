@@ -64,6 +64,20 @@ final class MenubKitTests: XCTestCase {
         XCTAssertEqual(invoked, "deploy")
     }
 
+    func testActionIDWithSlashRoundTrips() {
+        let dir = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let sat = makeSatellite(in: dir)
+
+        let action = sat.makeAction(id: "group/sub", title: "중첩 명령")
+        XCTAssertEqual(action.invoke, "runlet://action/group%2Fsub")  // '/'가 인코딩됨
+
+        var invoked: String?
+        sat.onInvoke { invoked = $0 }
+        XCTAssertTrue(sat.route(URL(string: action.invoke)!))
+        XCTAssertEqual(invoked, "group/sub")  // 세그먼트로 안 쪼개지고 원본 id 복원
+    }
+
     func testRouteRejectsForeignScheme() {
         let dir = makeTempDir()
         defer { try? FileManager.default.removeItem(at: dir) }

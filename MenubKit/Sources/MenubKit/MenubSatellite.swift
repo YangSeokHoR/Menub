@@ -52,8 +52,10 @@ public final class MenubSatellite {
     }
 
     /// 액션 id에 대응하는 invoke URL 문자열. (`<scheme>://action/<id>`)
+    /// id는 하나의 경로 세그먼트로 다루므로 `/`까지 인코딩한다(라우팅에서 세그먼트가 쪼개지지 않게).
     public func invokeString(for actionID: String) -> String {
-        let encoded = actionID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? actionID
+        let allowed = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))
+        let encoded = actionID.addingPercentEncoding(withAllowedCharacters: allowed) ?? actionID
         return "\(urlScheme)://action/\(encoded)"
     }
 
@@ -100,11 +102,15 @@ public final class MenubSatellite {
     }
 
     /// 들어온 URL을 파싱해 onInvoke 핸들러로 넘긴다. onOpenURL/application(_:open:)에서 호출.
+    /// id는 `<scheme>://action/` 접두사 뒤 전체를 하나로 취급해, id 안의 `/`가 세그먼트로 쪼개지지 않게 한다.
     @discardableResult
     public func route(_ url: URL) -> Bool {
-        guard url.scheme == urlScheme, url.host == "action" else { return false }
-        let actionID = url.lastPathComponent
-        guard !actionID.isEmpty, actionID != "/" else { return false }
+        let prefix = "\(urlScheme)://action/"
+        let string = url.absoluteString
+        guard string.hasPrefix(prefix) else { return false }
+        let encoded = String(string.dropFirst(prefix.count))
+        guard !encoded.isEmpty else { return false }
+        let actionID = encoded.removingPercentEncoding ?? encoded
         invokeHandler?(actionID)
         return true
     }
@@ -113,7 +119,7 @@ public final class MenubSatellite {
 
     /// 허브가 이 위성을 관리(아이콘 숨김) 중인지. 시작 시 읽어 상태 아이템 생성 여부를 결정한다.
     public var isManagedByHub: Bool {
-        let url = baseDirectory.appendingPathComponent("managed.json", isDirectory: false)
+        let url = MenubPaths.managedURL(in: baseDirectory)
         guard let data = try? Data(contentsOf: url),
               let registry = try? JSONDecoder().decode(MenubManagedRegistry.self, from: data) else {
             return false

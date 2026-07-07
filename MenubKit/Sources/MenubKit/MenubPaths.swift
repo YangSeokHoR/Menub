@@ -18,8 +18,8 @@ public enum MenubPaths {
         directory.appendingPathComponent("manifests", isDirectory: true)
     }
 
-    public static var managedURL: URL {
-        directory.appendingPathComponent("managed.json", isDirectory: false)
+    public static func managedURL(in base: URL = directory) -> URL {
+        base.appendingPathComponent("managed.json", isDirectory: false)
     }
 
     public static func manifestURL(id: String, in base: URL = directory) -> URL {
