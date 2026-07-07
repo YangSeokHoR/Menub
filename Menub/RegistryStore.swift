@@ -56,6 +56,14 @@ final class RegistryStore {
             }
     }
 
+    /// 해당 위성의 매니페스트 파일을 지워 감지 목록에서 제거한다.
+    /// (그 위성 앱이 다시 실행되면 계약대로 스스로 매니페스트를 다시 기록한다)
+    func deleteManifest(id: String) {
+        let url = manifestsDirectory.appendingPathComponent("\(id).json", isDirectory: false)
+        try? FileManager.default.removeItem(at: url)
+        load()
+    }
+
     private func ensureDirectoryExists() {
         try? FileManager.default.createDirectory(
             at: manifestsDirectory,

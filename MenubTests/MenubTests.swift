@@ -217,6 +217,34 @@ struct MenubTests {
         #expect(reloaded.effectiveHotkey == custom)
     }
 
+    @Test func removeClearsEntryAndUnmanages() throws {
+        let (config, coordinator, dir) = makeIsolatedConfig()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        config.setEnabled("runlet", true)
+        #expect(coordinator.managedIDs() == ["runlet"])
+
+        config.remove("runlet")
+        #expect(config.isEnabled("runlet") == false)
+        #expect(config.enabledIDs.isEmpty)
+        #expect(coordinator.managedIDs() == [])   // 관리 해제 → 위성이 아이콘 복귀
+    }
+
+    @Test func deleteManifestRemovesFromRegistry() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let json = #"{"id":"runlet","displayName":"Runlet","urlScheme":"runlet","actions":[]}"#
+        try json.data(using: .utf8)!.write(to: dir.appendingPathComponent("runlet.json"))
+
+        let registry = RegistryStore(manifestsDirectory: dir)
+        #expect(registry.manifests.map(\.id) == ["runlet"])
+
+        registry.deleteManifest(id: "runlet")
+        #expect(registry.manifests.isEmpty)
+    }
+
     @Test func runtimeMonitorMatchesBundleIdentifier() throws {
         let running: Set<String> = ["com.example.runlet"]
         #expect(RuntimeMonitor.contains("com.example.runlet", in: running) == true)

@@ -111,6 +111,13 @@ final class ConfigStore {
         save()
     }
 
+    /// 위성을 허브에서 제거한다(설정/핀/정렬 삭제 + 관리 해제 → 위성이 아이콘 복귀).
+    func remove(_ satelliteId: String) {
+        config.entries.removeAll { $0.satelliteId == satelliteId }
+        save()
+        syncManaged()
+    }
+
     /// 팔레트 단축키를 저장하고 재등록 콜백을 호출한다.
     func setPaletteHotkey(_ hotkey: Hotkey?) {
         config.paletteHotkey = hotkey
