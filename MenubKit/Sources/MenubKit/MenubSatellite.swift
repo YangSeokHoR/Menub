@@ -21,6 +21,8 @@ public final class MenubSatellite {
     private let baseDirectory: URL
     private var actions: [MenubAction] = []
     private var invokeHandler: ((String) -> Void)?
+    private var quitTitle: String?
+    private var quitHandler: (() -> Void)?
     private var managementSource: (any DispatchSourceFileSystemObject)?
     private var lastManagedState: Bool?
 
@@ -69,18 +71,40 @@ public final class MenubSatellite {
     /// 현재 설정된 액션(디버깅/검증용).
     public var currentActions: [MenubAction] { actions }
 
+    /// 허브 액션 목록에 붙는 표준 "종료" 액션의 id.
+    public static let quitActionID = "__menub_quit__"
+
+    /// 허브 액션 목록 맨 아래에 표준 "종료" 항목을 추가한다. 눌리면 handler(보통 앱 종료)를 호출한다.
+    /// writeManifest가 이 액션을 자동으로 덧붙이고, route가 자동으로 처리하므로 앱은 이 한 줄만 호출하면 된다.
+    /// (허브가 위성을 관리하면 위성 아이콘이 숨겨져 자기 종료 버튼에 접근할 수 없으므로, 허브에서 종료할 수단이 된다)
+    public func setQuitAction(title: String = "종료", _ handler: @escaping () -> Void) {
+        quitTitle = title
+        quitHandler = handler
+    }
+
     // MARK: - 계약 1: 매니페스트 기록
 
     /// 현재 정보/액션으로 매니페스트를 최신본으로 기록한다. 앱 시작 시와 액션 변경 시마다 호출.
     @discardableResult
     public func writeManifest() -> Bool {
+        var manifestActions = actions
+        if let quitTitle {
+            manifestActions.append(
+                MenubAction(
+                    id: Self.quitActionID,
+                    title: quitTitle,
+                    invoke: invokeString(for: Self.quitActionID),
+                    iconRef: "sf:power"
+                )
+            )
+        }
         let manifest = MenubManifest(
             id: id,
             displayName: displayName,
             urlScheme: urlScheme,
             bundleIdentifier: bundleIdentifier,
             iconRef: iconRef,
-            actions: actions
+            actions: manifestActions
         )
         let url = MenubPaths.manifestURL(id: id, in: baseDirectory)
         do {
@@ -94,6 +118,11 @@ public final class MenubSatellite {
         } catch {
             return false
         }
+    }
+
+    /// 자기 매니페스트 파일을 지운다(허브 목록에서 제거). 다음 실행 시 writeManifest로 재등록된다.
+    public func removeManifest() {
+        try? FileManager.default.removeItem(at: MenubPaths.manifestURL(id: id, in: baseDirectory))
     }
 
     // MARK: - 계약 2: URL scheme 핸들러
@@ -113,7 +142,12 @@ public final class MenubSatellite {
         let encoded = String(string.dropFirst(prefix.count))
         guard !encoded.isEmpty else { return false }
         let actionID = encoded.removingPercentEncoding ?? encoded
-        invokeHandler?(actionID)
+        if actionID == Self.quitActionID {
+            removeManifest()   // 허브 목록에서 즉시 사라지도록 매니페스트 삭제 후 종료
+            quitHandler?()
+        } else {
+            invokeHandler?(actionID)
+        }
         return true
     }
 
