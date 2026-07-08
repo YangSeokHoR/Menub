@@ -78,6 +78,34 @@ final class MenubKitTests: XCTestCase {
         XCTAssertEqual(invoked, "group/sub")  // 세그먼트로 안 쪼개지고 원본 id 복원
     }
 
+    func testQuitActionAppendedToManifestAndRouted() throws {
+        let dir = makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let sat = makeSatellite(in: dir)
+        sat.setActions([sat.makeAction(id: "deploy", title: "배포")])
+
+        var quit = false
+        var invoked: String?
+        sat.onInvoke { invoked = $0 }
+        sat.setQuitAction { quit = true }
+
+        // 매니페스트 맨 뒤에 종료 액션이 붙는다
+        XCTAssertTrue(sat.writeManifest())
+        let decoded = try JSONDecoder().decode(
+            MenubManifest.self,
+            from: Data(contentsOf: MenubPaths.manifestURL(id: "runlet", in: dir))
+        )
+        XCTAssertEqual(decoded.actions.map(\.id), ["deploy", MenubSatellite.quitActionID])
+        XCTAssertEqual(decoded.actions.last?.title, "종료")
+
+        // 종료 액션 URL은 invokeHandler가 아니라 quitHandler로 가고, 매니페스트를 지운다
+        let manifestURL = MenubPaths.manifestURL(id: "runlet", in: dir)
+        XCTAssertTrue(sat.route(URL(string: sat.invokeString(for: MenubSatellite.quitActionID))!))
+        XCTAssertTrue(quit)
+        XCTAssertNil(invoked)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: manifestURL.path))  // 허브에서 사라짐
+    }
+
     func testRouteRejectsForeignScheme() {
         let dir = makeTempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
